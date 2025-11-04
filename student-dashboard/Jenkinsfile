@@ -1,0 +1,56 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        DOCKER_IMAGE = 'tijilparakh04/student-dashboard'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'dev') {
+                        sh 'docker build -t ${DOCKER_IMAGE}:test .'
+                    } else if (env.BRANCH_NAME == 'main') {
+                        sh 'docker build -t ${DOCKER_IMAGE}:latest .'
+                    }
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'dev') {
+                        sh 'docker login -u $DOCKERHUB_CREDENTIALS_USR -p $DOCKERHUB_CREDENTIALS_PSW'
+                        sh 'docker push ${DOCKER_IMAGE}:test'
+                    } else if (env.BRANCH_NAME == 'main') {
+                        sh 'docker login -u $DOCKERHUB_CREDENTIALS_USR -p $DOCKERHUB_CREDENTIALS_PSW'
+                        sh 'docker push ${DOCKER_IMAGE}:latest'
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'dev') {
+                        sh 'kubectl apply -f deployment.yaml'
+                        sh 'kubectl set image deployment/student-dashboard student-dashboard=${DOCKER_IMAGE}:test'
+                    } else if (env.BRANCH_NAME == 'main') {
+                        sh 'kubectl apply -f deployment.yaml'
+                        sh 'kubectl set image deployment/student-dashboard student-dashboard=${DOCKER_IMAGE}:latest'
+                    }
+                }
+            }
+        }
+    }
+}
